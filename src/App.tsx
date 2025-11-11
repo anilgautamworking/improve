@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { api } from './lib/api';
+import { api, refreshToken } from './lib/api';
 import { AuthForm } from './components/AuthForm';
 import { InfiniteQuizFeed } from './components/InfiniteQuizFeed';
 
@@ -15,8 +15,28 @@ function App() {
   }, []);
 
   const checkUser = () => {
+    // Refresh token from localStorage in case it was updated
+    refreshToken();
+    
     const isAuth = api.isAuthenticated();
-    setScreen(isAuth ? 'feed' : 'auth');
+    if (!isAuth) {
+      // Token expired or doesn't exist, clear any stale data
+      api.logout();
+      setScreen('auth');
+      setUser(null);
+    } else {
+      // User is authenticated, extract user info from token
+      const userFromToken = api.getUserFromToken();
+      if (userFromToken && userFromToken.id) {
+        setUser(userFromToken);
+        setScreen('feed');
+      } else {
+        // Token exists but can't extract user info, show auth
+        api.logout();
+        setScreen('auth');
+        setUser(null);
+      }
+    }
     setLoading(false);
   };
 
@@ -40,8 +60,14 @@ function App() {
     return <AuthForm onSuccess={handleAuthSuccess} />;
   }
 
-  if (screen === 'feed' && user) {
-    return <InfiniteQuizFeed userId={user.id} />;
+  if (screen === 'feed') {
+    // If user is available, use it; otherwise try to get from token
+    const userId = user?.id || api.getUserFromToken()?.id;
+    if (userId) {
+      return <InfiniteQuizFeed userId={userId} />;
+    }
+    // Fallback: show auth if we can't get userId
+    return <AuthForm onSuccess={handleAuthSuccess} />;
   }
 
   return null;

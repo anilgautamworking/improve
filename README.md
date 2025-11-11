@@ -1,38 +1,86 @@
-# India Quiz App - PostgreSQL Edition
+# India Quiz App - Unified Backend Edition
 
 ## Setup
 
-1. **Start Docker Desktop** (required)
-
-2. **Start Database**:
+### 1. Start Backend (Python/Flask API)
 ```bash
-docker-compose up -d
+cd ../DailyQuestionBank-automation
+./scripts/start_api.sh
 ```
 
-3. **Start Backend Server**:
-```bash
-npm run server
-```
+This starts the unified Flask backend on port 3001 which provides:
+- User authentication
+- Question API
+- User progress tracking
+- Admin dashboard
 
-4. **Start Frontend** (in new terminal):
+### 2. Start Frontend (in new terminal)
 ```bash
+cd Dailyquestionbank-frontend
 npm run dev
 ```
 
 ## Configuration
 
-Database runs on `localhost:54321`
-Backend API runs on `localhost:3001`
-Frontend runs on `localhost:5173`
+- **Backend API**: `http://localhost:3001` (Flask)
+- **Frontend**: `http://localhost:5173` (Vite)
+- **Database**: `localhost:5432` (PostgreSQL via Docker)
+- **Admin Dashboard**: `http://localhost:3001` (Flask)
 
-## Environment Variables
+## Features
 
-Edit `.env` file if needed. Default credentials work out of the box.
+✨ **AI-Powered Questions**: Questions automatically generated daily from news articles  
+📊 **Dynamic Categories**: Categories and question counts load from database  
+🎯 **Smart Filtering**: Time-based filtering (News This Month, Last 3 Months)  
+📱 **Mobile Optimized**: Touch gestures for swiping categories and questions  
+⚙️ **Settings**: Enforce answer requirement, difficulty filters, statement questions  
+🔒 **Authentication**: JWT-based secure authentication  
 
-## Reset Database
+## Architecture
 
+The app now uses a **unified Python backend** that:
+- Scrapes news articles daily via cron
+- Generates questions using AI (OpenAI/Ollama)
+- Serves both admin dashboard and user API
+- Manages all database operations
+
+**No more Node.js/Express backend needed!**
+
+## Database
+
+The backend uses the automation database:
+- Host: `localhost`
+- Port: `5432`
+- Database: `daily_question_bank`
+- User: `postgres`
+- Password: `postgres`
+
+Database is managed by `DailyQuestionBank-automation` via Docker.
+
+## Development
+
+### Backend Development
 ```bash
-docker-compose down -v
-docker-compose up -d
+cd ../DailyQuestionBank-automation
+source venv/bin/activate
+python3 src/api/app.py
 ```
+
+### Frontend Development
+```bash
+npm run dev
+```
+
+### Generate Questions Manually
+```bash
+cd ../DailyQuestionBank-automation
+source venv/bin/activate
+python scripts/run_daily_pipeline.py
+```
+
+## Migration Notes
+
+This app has been migrated from Express (Node.js) to Flask (Python).
+
+See `MIGRATION_TO_FLASK.md` for details.
 
