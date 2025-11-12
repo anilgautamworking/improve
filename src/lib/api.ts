@@ -1,3 +1,5 @@
+import { getUserFriendlyError, isRetryableError, getRetryDelay, isNetworkError } from '../utils/errorMessages';
+
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001/api';
 
 // Initialize token from localStorage
@@ -77,57 +79,163 @@ class API {
     window.location.href = '/';
   }
 
-  // Centralized fetch wrapper to handle auth errors
-  private async fetchWithAuth(url: string, options: RequestInit = {}) {
+  // Centralized fetch wrapper to handle auth errors with retry logic
+  private async fetchWithAuth(
+    url: string, 
+    options: RequestInit = {}, 
+    retries: number = 3,
+    currentAttempt: number = 0
+  ): Promise<any> {
     // Check if token is expired before making request
     if (authToken && isTokenExpired(authToken)) {
       this.handleAuthError();
       throw new Error('Token expired');
     }
 
-    const res = await fetch(url, options);
-    const data = await res.json();
-
-    // Handle authentication errors
-    if (res.status === 401 || res.status === 403) {
-      // Check if it's an auth error (not just any 401/403)
-      if (data.error && (data.error.includes('token') || data.error.includes('Token') || data.error.includes('expired') || data.error.includes('Invalid'))) {
-        this.handleAuthError();
-        throw new Error('Session expired. Please login again.');
+    try {
+      // Add timeout to fetch
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
+      
+      const res = await fetch(url, {
+        ...options,
+        signal: controller.signal,
+      });
+      
+      clearTimeout(timeoutId);
+      
+      // Check if response is JSON before parsing
+      const contentType = res.headers.get('content-type');
+      let data: any;
+      
+      try {
+        if (contentType && contentType.includes('application/json')) {
+          const text = await res.text();
+          data = text ? JSON.parse(text) : {};
+        } else {
+          // Non-JSON response (e.g., HTML error page)
+          const text = await res.text();
+          throw new Error(`Server returned non-JSON response: ${text.substring(0, 100)}`);
+        }
+      } catch (parseError: any) {
+        // JSON parsing failed
+        if (parseError instanceof SyntaxError) {
+          throw new Error('Invalid response from server. Please try again.');
+        }
+        throw parseError;
       }
-    }
 
-    if (!res.ok) {
-      throw new Error(data.error || 'Request failed');
-    }
+      // Handle authentication errors
+      if (res.status === 401 || res.status === 403) {
+        // Check if it's an auth error
+        if (data.error_code?.startsWith('AUTH_') || 
+            data.error && (data.error.includes('token') || data.error.includes('Token') || data.error.includes('expired') || data.error.includes('Invalid'))) {
+          this.handleAuthError();
+          throw new Error(getUserFriendlyError(data));
+        }
+      }
 
-    return data;
+      if (!res.ok) {
+        // Check if error is retryable
+        if (currentAttempt < retries && isRetryableError(data, res.status)) {
+          const delay = getRetryDelay(currentAttempt);
+          await new Promise(resolve => setTimeout(resolve, delay));
+          return this.fetchWithAuth(url, options, retries, currentAttempt + 1);
+        }
+        
+        // Throw user-friendly error
+        throw new Error(getUserFriendlyError(data));
+      }
+
+      return data;
+    } catch (error: any) {
+      // Handle network errors
+      if (isNetworkError(error) && currentAttempt < retries) {
+        const delay = getRetryDelay(currentAttempt);
+        await new Promise(resolve => setTimeout(resolve, delay));
+        return this.fetchWithAuth(url, options, retries, currentAttempt + 1);
+      }
+      
+      // Handle abort (timeout)
+      if (error.name === 'AbortError') {
+        throw new Error('Request timed out. Please try again.');
+      }
+      
+      // Re-throw with user-friendly message
+      throw new Error(getUserFriendlyError(error));
+    }
   }
 
   async signup(email: string, password: string) {
-    const res = await fetch(`${API_URL}/auth/signup`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, password }),
-    });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error);
-    authToken = data.token;
-    localStorage.setItem('auth_token', data.token);
-    return data;
+    try {
+      const res = await fetch(`${API_URL}/auth/signup`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password }),
+      });
+      
+      let data: any;
+      try {
+        const contentType = res.headers.get('content-type');
+        if (contentType && contentType.includes('application/json')) {
+          const text = await res.text();
+          data = text ? JSON.parse(text) : {};
+        } else {
+          const text = await res.text();
+          throw new Error(`Server returned non-JSON response: ${text.substring(0, 100)}`);
+        }
+      } catch (parseError: any) {
+        if (parseError instanceof SyntaxError) {
+          throw new Error('Invalid response from server. Please try again.');
+        }
+        throw parseError;
+      }
+      
+      if (!res.ok) {
+        throw new Error(getUserFriendlyError(data));
+      }
+      authToken = data.token;
+      localStorage.setItem('auth_token', data.token);
+      return data;
+    } catch (error: any) {
+      throw new Error(getUserFriendlyError(error));
+    }
   }
 
   async login(email: string, password: string) {
-    const res = await fetch(`${API_URL}/auth/login`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, password }),
-    });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error);
-    authToken = data.token;
-    localStorage.setItem('auth_token', data.token);
-    return data;
+    try {
+      const res = await fetch(`${API_URL}/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password }),
+      });
+      
+      let data: any;
+      try {
+        const contentType = res.headers.get('content-type');
+        if (contentType && contentType.includes('application/json')) {
+          const text = await res.text();
+          data = text ? JSON.parse(text) : {};
+        } else {
+          const text = await res.text();
+          throw new Error(`Server returned non-JSON response: ${text.substring(0, 100)}`);
+        }
+      } catch (parseError: any) {
+        if (parseError instanceof SyntaxError) {
+          throw new Error('Invalid response from server. Please try again.');
+        }
+        throw parseError;
+      }
+      
+      if (!res.ok) {
+        throw new Error(getUserFriendlyError(data));
+      }
+      authToken = data.token;
+      localStorage.setItem('auth_token', data.token);
+      return data;
+    } catch (error: any) {
+      throw new Error(getUserFriendlyError(error));
+    }
   }
 
   logout() {

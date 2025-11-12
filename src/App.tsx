@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { api, refreshToken } from './lib/api';
 import { AuthForm } from './components/AuthForm';
 import { InfiniteQuizFeed } from './components/InfiniteQuizFeed';
+import { ErrorBoundary } from './components/ErrorBoundary';
 
 type Screen = 'auth' | 'feed';
 
@@ -73,4 +74,12 @@ function App() {
   return null;
 }
 
-export default App;
+function AppWithErrorBoundary() {
+  return (
+    <ErrorBoundary>
+      <App />
+    </ErrorBoundary>
+  );
+}
+
+export default AppWithErrorBoundary;

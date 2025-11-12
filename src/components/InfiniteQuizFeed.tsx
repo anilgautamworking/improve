@@ -24,6 +24,9 @@ export function InfiniteQuizFeed({ userId }: QuizFeedProps) {
   const [categories, setCategories] = useState<Category[]>([]);
   const [selectedCategory, setSelectedCategory] = useState('all');
   const [currentIndex, setCurrentIndex] = useState(0);
+  const [isCategoryTransitioning, setIsCategoryTransitioning] = useState(false);
+  const previousCategoryRef = useRef<string | null>(null);
+  const isInitialLoadRef = useRef(true);
   const [score, setScore] = useState(0);
   const [streak, setStreak] = useState(0);
   const [totalAnswered, setTotalAnswered] = useState(0);
@@ -42,11 +45,66 @@ export function InfiniteQuizFeed({ userId }: QuizFeedProps) {
   }, []);
 
   useEffect(() => {
-    loadQuestions();
+    // Check if category changed (not just filters)
+    const categoryChanged = previousCategoryRef.current !== null && previousCategoryRef.current !== selectedCategory;
+    const isInitialLoad = isInitialLoadRef.current;
+    
+    previousCategoryRef.current = selectedCategory;
+    isInitialLoadRef.current = false;
+    
+    if (categoryChanged && !isInitialLoad) {
+      // Smooth transition: don't reset immediately, load in background
+      setIsCategoryTransitioning(true);
+      
+      // Load new questions without resetting currentIndex immediately
+      loadQuestions(false, true).finally(() => {
+        // After questions are loaded, smoothly scroll to top
+        setTimeout(() => {
+          if (containerRef.current) {
+            isProgrammaticScrollRef.current = true;
+            setCurrentIndex(0);
+            containerRef.current.scrollTo({
+              top: 0,
+              behavior: 'smooth',
+            });
+            setTimeout(() => {
+              isProgrammaticScrollRef.current = false;
+              setIsCategoryTransitioning(false);
+              
+              // Now scroll category button into view after transition completes
+              setTimeout(() => {
+                if (categoryContainerRef.current && categories.length > 0) {
+                  const selectedIndex = categories.findIndex(c => c.name === selectedCategory);
+                  if (selectedIndex >= 0) {
+                    const buttons = categoryContainerRef.current.querySelectorAll('button');
+                    const selectedButton = buttons[selectedIndex];
+                    if (selectedButton) {
+                      selectedButton.scrollIntoView({
+                        behavior: 'smooth',
+                        block: 'nearest',
+                        inline: 'center'
+                      });
+                    }
+                  }
+                }
+              }, 100);
+            }, 500);
+          } else {
+            setIsCategoryTransitioning(false);
+          }
+        }, 100);
+      });
+    } else {
+      // Initial load or just filters changed, normal load
+      loadQuestions();
+    }
   }, [selectedCategory, statementQuestionsOnly, difficulty]);
 
   // Scroll category bar to show selected category
   useEffect(() => {
+    // Don't scroll during category transitions to avoid visual reset
+    if (isCategoryTransitioning) return;
+    
     // Small delay to ensure DOM is ready
     const timeoutId = setTimeout(() => {
       if (categoryContainerRef.current && categories.length > 0) {
@@ -69,7 +127,7 @@ export function InfiniteQuizFeed({ userId }: QuizFeedProps) {
     }, 100); // Small delay to ensure DOM is ready
 
     return () => clearTimeout(timeoutId);
-  }, [selectedCategory, categories]);
+  }, [selectedCategory, categories, isCategoryTransitioning]);
 
   useEffect(() => {
     if (questionStates.length > 0 && currentIndex >= questionStates.length - 5 && !isLoadingRef.current) {
@@ -135,10 +193,11 @@ export function InfiniteQuizFeed({ userId }: QuizFeedProps) {
     }
   };
 
-  const loadQuestions = async (isLoadMore = false) => {
+  const loadQuestions = async (isLoadMore = false, isCategoryChange = false) => {
     try {
-      if (!isLoadMore) setLoading(true);
-      else setLoadingMore(true);
+      // Don't show loading state during category transitions for smoother UX
+      if (!isLoadMore && !isCategoryChange) setLoading(true);
+      else if (isLoadMore) setLoadingMore(true);
 
       // Get list of correctly answered question IDs
       const correctlyAnsweredIds = new Set(await api.getCorrectAnswers());
@@ -193,13 +252,18 @@ export function InfiniteQuizFeed({ userId }: QuizFeedProps) {
             setQuestionStates(prev => [...prev, ...states]);
           } else {
             setQuestionStates(states);
-            setCurrentIndex(0);
+            // Only reset index if not a category transition (will be handled by useEffect)
+            if (!isCategoryChange) {
+              setCurrentIndex(0);
+            }
           }
         } else {
           // No questions available after all filtering
           if (!isLoadMore) {
             setQuestionStates([]);
-            setCurrentIndex(0);
+            if (!isCategoryChange) {
+              setCurrentIndex(0);
+            }
             console.warn(`No questions available for category: ${category} after filtering`);
           }
         }
@@ -207,7 +271,9 @@ export function InfiniteQuizFeed({ userId }: QuizFeedProps) {
         // No questions returned from API
         if (!isLoadMore) {
           setQuestionStates([]);
-          setCurrentIndex(0);
+          if (!isCategoryChange) {
+            setCurrentIndex(0);
+          }
           console.warn(`No questions returned from API for category: ${category}`);
         }
       }
@@ -215,10 +281,14 @@ export function InfiniteQuizFeed({ userId }: QuizFeedProps) {
       console.error('Error loading questions:', err);
       if (!isLoadMore) {
         setQuestionStates([]);
-        setCurrentIndex(0);
+        if (!isCategoryChange) {
+          setCurrentIndex(0);
+        }
       }
     } finally {
-      setLoading(false);
+      if (!isCategoryChange) {
+        setLoading(false);
+      }
       setLoadingMore(false);
     }
   };
@@ -508,21 +578,14 @@ export function InfiniteQuizFeed({ userId }: QuizFeedProps) {
               <button
                 key={cat.id}
                 onClick={() => setSelectedCategory(cat.name)}
-                className={`px-4 py-2 rounded-full font-medium text-sm whitespace-nowrap transition-all flex-shrink-0 ${
+                className={`px-4 py-2 rounded-full font-medium text-sm whitespace-nowrap transition-all duration-300 ease-in-out flex-shrink-0 ${
                   selectedCategory === cat.name
-                    ? 'bg-gradient-to-r from-purple-500 to-pink-500 text-white'
+                    ? 'bg-gradient-to-r from-purple-500 to-pink-500 text-white scale-105'
                     : 'bg-gray-800 text-gray-400 hover:bg-gray-700 active:bg-gray-700'
                 }`}
               >
                 {cat.name === 'News This Month' && <Sparkles className="w-3 h-3 inline mr-1" />}
                 {cat.name === 'all' ? 'All' : cat.name}
-                {cat.question_count > 0 && (
-                  <span className={`ml-2 text-xs ${
-                    selectedCategory === cat.name ? 'text-white/80' : 'text-gray-500'
-                  }`}>
-                    ({cat.question_count})
-                  </span>
-                )}
               </button>
             ))}
           </div>
@@ -533,7 +596,9 @@ export function InfiniteQuizFeed({ userId }: QuizFeedProps) {
         ref={containerRef}
         {...questionHandlers}
         onScroll={handleScroll}
-        className="h-screen overflow-y-scroll snap-y snap-mandatory scrollbar-hide"
+        className={`h-screen overflow-y-scroll snap-y snap-mandatory scrollbar-hide transition-opacity duration-300 ${
+          isCategoryTransitioning ? 'opacity-70' : 'opacity-100'
+        }`}
         style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
       >
         {!loading && questionStates.length === 0 && (
@@ -555,7 +620,7 @@ export function InfiniteQuizFeed({ userId }: QuizFeedProps) {
 
         {questionStates.map((state, index) => (
           <QuestionCard
-            key={`${state.question.id}-${index}`}
+            key={`${selectedCategory}-${state.question.id}-${index}`}
             state={state}
             index={index}
             isActive={index === currentIndex}
@@ -631,7 +696,7 @@ function QuestionCard({ state, index, isActive, onAnswerSelect }: QuestionCardPr
   };
 
   return (
-    <div className="h-screen snap-start flex flex-col relative overflow-hidden">
+    <div className="h-screen snap-start flex flex-col relative overflow-hidden transition-opacity duration-300 ease-in-out">
       <div className={`flex items-center justify-center px-4 pt-32 bg-gradient-to-b from-gray-900 via-gray-800 to-gray-900 ${
         state.isAnswered ? 'pb-4' : 'pb-8'
       }`}>
