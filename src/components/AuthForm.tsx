@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { api } from '../lib/api';
 import { Lock, Mail, User } from 'lucide-react';
+import { ExamSelector } from './ExamSelector';
 
 interface AuthFormProps {
   onSuccess: (user: any) => void;
@@ -10,6 +11,7 @@ export function AuthForm({ onSuccess }: AuthFormProps) {
   const [isLogin, setIsLogin] = useState(true);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [examId, setExamId] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -21,7 +23,7 @@ export function AuthForm({ onSuccess }: AuthFormProps) {
     try {
       const data = isLogin 
         ? await api.login(email, password)
-        : await api.signup(email, password);
+        : await api.signup(email, password, examId || undefined);
       onSuccess(data.user);
     } catch (err: any) {
       setError(err.message || 'An error occurred');
@@ -77,6 +79,14 @@ export function AuthForm({ onSuccess }: AuthFormProps) {
                 />
               </div>
             </div>
+
+            {!isLogin && (
+              <ExamSelector
+                selectedExamId={examId}
+                onSelect={setExamId}
+                required={false}
+              />
+            )}
 
             {error && (
               <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">

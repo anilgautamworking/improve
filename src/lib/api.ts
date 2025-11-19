@@ -1,6 +1,8 @@
 import { getUserFriendlyError, isRetryableError, getRetryDelay, isNetworkError } from '../utils/errorMessages';
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001/api';
+// Use relative URL in production (Nginx proxies /api to localhost:3001)
+// Use absolute URL in development (direct connection to backend)
+const API_URL = import.meta.env.VITE_API_URL || (import.meta.env.DEV ? 'http://localhost:3001/api' : '/api');
 
 // Initialize token from localStorage
 let authToken: string | null = localStorage.getItem('auth_token');
@@ -55,6 +57,16 @@ export interface Question {
 export interface User {
   id: string;
   email: string;
+  role?: string;
+  exam_id?: string | null;
+}
+
+export interface Exam {
+  id: string;
+  name: string;
+  category: string | null;
+  description: string | null;
+  created_at: string | null;
 }
 
 export interface Category {
@@ -166,12 +178,29 @@ class API {
     }
   }
 
-  async signup(email: string, password: string) {
+  async getExams(): Promise<Exam[]> {
+    try {
+      const data = await fetch(`${API_URL}/exams`, {
+        method: 'GET',
+        headers: { 'Content-Type': 'application/json' },
+      }).then(res => {
+        if (!res.ok) {
+          throw new Error('Failed to fetch exams');
+        }
+        return res.json();
+      });
+      return data.exams || [];
+    } catch (error: any) {
+      throw new Error(getUserFriendlyError(error));
+    }
+  }
+
+  async signup(email: string, password: string, examId?: string) {
     try {
       const res = await fetch(`${API_URL}/auth/signup`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify({ email, password, exam_id: examId }),
       });
       
       let data: any;
@@ -243,11 +272,11 @@ class API {
     localStorage.removeItem('auth_token');
   }
 
-  async generateQuestions(category: string, count: number = 2) {
+  async generateQuestions(category: string, count: number = 2, examId?: string) {
     return this.fetchWithAuth(`${API_URL}/questions/generate`, {
       method: 'POST',
       headers: this.getHeaders(),
-      body: JSON.stringify({ category, count }),
+      body: JSON.stringify({ category, count, exam_id: examId }),
     });
   }
 
@@ -274,8 +303,11 @@ class API {
     });
   }
 
-  async getCategories(): Promise<Category[]> {
-    const data = await this.fetchWithAuth(`${API_URL}/categories`, {
+  async getCategories(examId?: string): Promise<Category[]> {
+    const url = examId 
+      ? `${API_URL}/categories?exam_id=${examId}`
+      : `${API_URL}/categories`;
+    const data = await this.fetchWithAuth(url, {
       method: 'GET',
       headers: this.getHeaders(),
     });
@@ -299,7 +331,146 @@ class API {
     return {
       id: decoded.userId || decoded.user_id || null,
       email: decoded.email || null,
+      role: decoded.role || 'user',
+      exam_id: decoded.exam_id || null,
     };
+  }
+
+  // Admin API methods
+  async getAdminStats() {
+    return this.fetchWithAuth(`${API_URL}/admin/stats`, {
+      method: 'GET',
+      headers: this.getHeaders(),
+    });
+  }
+
+  async getAdminSummaries(limit: number = 30) {
+    return this.fetchWithAuth(`${API_URL}/admin/summaries?limit=${limit}`, {
+      method: 'GET',
+      headers: this.getHeaders(),
+    });
+  }
+
+  async getAdminQuestions(date: string) {
+    return this.fetchWithAuth(`${API_URL}/admin/questions/${date}`, {
+      method: 'GET',
+      headers: this.getHeaders(),
+    });
+  }
+
+  // Admin Exam Management
+  async adminGetExams() {
+    const data = await this.fetchWithAuth(`${API_URL}/admin/exams`, {
+      method: 'GET',
+      headers: this.getHeaders(),
+    });
+    return data.exams || [];
+  }
+
+  async adminCreateExam(exam: { name: string; category?: string; description?: string }) {
+    return this.fetchWithAuth(`${API_URL}/admin/exams`, {
+      method: 'POST',
+      headers: this.getHeaders(),
+      body: JSON.stringify(exam),
+    });
+  }
+
+  async adminUpdateExam(examId: string, exam: { name: string; category?: string; description?: string }) {
+    return this.fetchWithAuth(`${API_URL}/admin/exams/${examId}`, {
+      method: 'PUT',
+      headers: this.getHeaders(),
+      body: JSON.stringify(exam),
+    });
+  }
+
+  async adminDeleteExam(examId: string) {
+    return this.fetchWithAuth(`${API_URL}/admin/exams/${examId}`, {
+      method: 'DELETE',
+      headers: this.getHeaders(),
+    });
+  }
+
+  async adminGetExamCategories(examId: string) {
+    const data = await this.fetchWithAuth(`${API_URL}/admin/exams/${examId}/categories`, {
+      method: 'GET',
+      headers: this.getHeaders(),
+    });
+    return data.categories || [];
+  }
+
+  async adminAddExamCategory(examId: string, categoryId: string) {
+    return this.fetchWithAuth(`${API_URL}/admin/exams/${examId}/categories`, {
+      method: 'POST',
+      headers: this.getHeaders(),
+      body: JSON.stringify({ category_id: categoryId }),
+    });
+  }
+
+  async adminRemoveExamCategory(examId: string, categoryId: string) {
+    return this.fetchWithAuth(`${API_URL}/admin/exams/${examId}/categories/${categoryId}`, {
+      method: 'DELETE',
+      headers: this.getHeaders(),
+    });
+  }
+
+  // Admin Category Management
+  async adminGetCategories() {
+    const data = await this.fetchWithAuth(`${API_URL}/admin/categories`, {
+      method: 'GET',
+      headers: this.getHeaders(),
+    });
+    return data.categories || [];
+  }
+
+  async adminCreateCategory(category: { name: string; description: string }) {
+    return this.fetchWithAuth(`${API_URL}/admin/categories`, {
+      method: 'POST',
+      headers: this.getHeaders(),
+      body: JSON.stringify(category),
+    });
+  }
+
+  async adminUpdateCategory(categoryId: string, category: { name: string; description: string }) {
+    return this.fetchWithAuth(`${API_URL}/admin/categories/${categoryId}`, {
+      method: 'PUT',
+      headers: this.getHeaders(),
+      body: JSON.stringify(category),
+    });
+  }
+
+  async adminDeleteCategory(categoryId: string) {
+    return this.fetchWithAuth(`${API_URL}/admin/categories/${categoryId}`, {
+      method: 'DELETE',
+      headers: this.getHeaders(),
+    });
+  }
+
+  async adminGetCategoryDeletionImpact(categoryId: string) {
+    return this.fetchWithAuth(`${API_URL}/admin/categories/${categoryId}/impact`, {
+      method: 'GET',
+      headers: this.getHeaders(),
+    });
+  }
+
+  async adminGetExamDeletionImpact(examId: string) {
+    return this.fetchWithAuth(`${API_URL}/admin/exams/${examId}/impact`, {
+      method: 'GET',
+      headers: this.getHeaders(),
+    });
+  }
+
+  async adminGetQuestionLibraryStats() {
+    return this.fetchWithAuth(`${API_URL}/admin/question-library`, {
+      method: 'GET',
+      headers: this.getHeaders(),
+    });
+  }
+
+  async adminGetOrphanedCategories() {
+    return this.fetchWithAuth(`${API_URL}/admin/orphaned-categories`, {
+      method: 'GET',
+      headers: this.getHeaders(),
+    });
   }
 }
 

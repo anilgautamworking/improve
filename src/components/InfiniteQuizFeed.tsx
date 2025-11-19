@@ -6,6 +6,7 @@ import { SettingsScreen } from './SettingsScreen';
 
 interface QuizFeedProps {
   userId: string;
+  examId?: string | null;
 }
 
 interface QuestionState {
@@ -17,7 +18,7 @@ interface QuestionState {
   isAnswered: boolean;
 }
 
-export function InfiniteQuizFeed({ userId }: QuizFeedProps) {
+export function InfiniteQuizFeed({ userId, examId }: QuizFeedProps) {
   const [questionStates, setQuestionStates] = useState<QuestionState[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -39,10 +40,10 @@ export function InfiniteQuizFeed({ userId }: QuizFeedProps) {
   const isLoadingRef = useRef(false);
   const isProgrammaticScrollRef = useRef(false);
 
-  // Load categories on mount
+  // Load categories on mount and when examId changes
   useEffect(() => {
     loadCategories();
-  }, []);
+  }, [examId]);
 
   useEffect(() => {
     // Check if category changed (not just filters)
@@ -159,7 +160,7 @@ export function InfiniteQuizFeed({ userId }: QuizFeedProps) {
 
   const loadCategories = async () => {
     try {
-      const cats = await api.getCategories();
+      const cats = await api.getCategories(examId || undefined);
       
       // Filter out categories with 0 questions (except "All")
       const categoriesWithQuestions = cats.filter(c => c.question_count > 0);
@@ -206,7 +207,7 @@ export function InfiniteQuizFeed({ userId }: QuizFeedProps) {
 
       // Request more questions to account for filtering
       const requestCount = isLoadMore ? 2 : 5; // Request more initially to ensure we have questions after filtering
-      const { questions } = await api.generateQuestions(category, requestCount);
+      const { questions } = await api.generateQuestions(category, requestCount, examId || undefined);
 
       if (questions && questions.length > 0) {
         // Filter out questions the user has already answered correctly
@@ -227,7 +228,7 @@ export function InfiniteQuizFeed({ userId }: QuizFeedProps) {
           if (!isLoadMore) {
             console.warn(`No questions available after filtering for category: ${category}. All questions may be answered or filtered.`);
             // Try requesting more questions
-            const { questions: moreQuestions } = await api.generateQuestions(category, 10);
+            const { questions: moreQuestions } = await api.generateQuestions(category, 10, examId || undefined);
             if (moreQuestions && moreQuestions.length > 0) {
               filteredQuestions = moreQuestions
                 .filter((q: Question) => !correctlyAnsweredIds.has(q.id))
@@ -304,7 +305,7 @@ export function InfiniteQuizFeed({ userId }: QuizFeedProps) {
 
       const category = selectedCategory === 'all' ? 'all' : selectedCategory;
 
-      const { questions } = await api.generateQuestions(category, 5);
+      const { questions } = await api.generateQuestions(category, 5, examId || undefined);
 
       if (questions && questions.length > 0) {
         // Filter out questions the user has already answered correctly
