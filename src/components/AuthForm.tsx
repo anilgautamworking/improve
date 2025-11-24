@@ -1,6 +1,5 @@
 import { useState } from 'react';
 import { api } from '../lib/api';
-import { Lock, Mail, User } from 'lucide-react';
 import { ExamSelector } from './ExamSelector';
 
 interface AuthFormProps {
@@ -33,51 +32,46 @@ export function AuthForm({ onSuccess }: AuthFormProps) {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-orange-50 flex items-center justify-center p-4">
-      <div className="w-full max-w-md">
-        <div className="bg-white rounded-2xl shadow-xl p-8">
-          <div className="text-center mb-8">
-            <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-br from-blue-500 to-orange-500 rounded-full mb-4">
-              <User className="w-8 h-8 text-white" />
-            </div>
-            <h1 className="text-3xl font-bold text-gray-900">Civil Services Quiz</h1>
-            <p className="text-gray-600 mt-2">Prepare for UPSC exams with confidence</p>
+    <div className="min-h-screen bg-white flex items-center justify-center p-6">
+      <div className="w-full max-w-md space-y-8">
+        <div className="text-center">
+          <h1 className="text-2xl font-semibold text-black mb-2">
+            Civil Services Daily
+          </h1>
+          <p className="text-gray-600 text-sm">
+            Practice questions for your exam
+          </p>
+        </div>
+
+        <div className="bg-white rounded-lg p-6 space-y-6">
+          <div className="text-center text-lg font-medium text-black">
+            {isLogin ? 'Sign In' : 'Create Account'}
           </div>
 
-          <form onSubmit={handleSubmit} className="space-y-6">
+          <form onSubmit={handleSubmit} className="space-y-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Email Address
-              </label>
-              <div className="relative">
-                <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-                <input
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition"
-                  placeholder="your@email.com"
-                  required
-                />
-              </div>
+              <label className="block text-sm text-gray-700 mb-1">Email</label>
+              <input
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                className="w-full bg-gray-50 text-black rounded px-3 py-2 text-base focus:outline-none focus:bg-gray-100"
+                placeholder="you@example.com"
+                required
+              />
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Password
-              </label>
-              <div className="relative">
-                <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-                <input
-                  type="password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition"
-                  placeholder="••••••••"
-                  required
-                  minLength={6}
-                />
-              </div>
+              <label className="block text-sm text-gray-700 mb-1">Password</label>
+              <input
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className="w-full bg-gray-50 text-black rounded px-3 py-2 text-base focus:outline-none focus:bg-gray-100"
+                placeholder="minimum 6 characters"
+                required
+                minLength={6}
+              />
             </div>
 
             {!isLogin && (
@@ -89,7 +83,7 @@ export function AuthForm({ onSuccess }: AuthFormProps) {
             )}
 
             {error && (
-              <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
+              <div className="p-3 text-red-700 text-sm bg-red-50 rounded">
                 {error}
               </div>
             )}
@@ -97,20 +91,18 @@ export function AuthForm({ onSuccess }: AuthFormProps) {
             <button
               type="submit"
               disabled={loading}
-              className="w-full py-3 bg-gradient-to-r from-blue-500 to-orange-500 text-white font-semibold rounded-lg hover:from-blue-600 hover:to-orange-600 transition disabled:opacity-50 disabled:cursor-not-allowed shadow-lg"
+              className="w-full bg-black text-white py-3 rounded text-base font-medium disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-800"
             >
-              {loading ? 'Please wait...' : isLogin ? 'Sign In' : 'Sign Up'}
+              {loading ? 'Please wait' : isLogin ? 'Sign In' : 'Sign Up'}
             </button>
           </form>
 
-          <div className="mt-6 text-center">
-            <button
-              onClick={() => setIsLogin(!isLogin)}
-              className="text-blue-600 hover:text-blue-700 font-medium transition"
-            >
-              {isLogin ? "Don't have an account? Sign Up" : 'Already have an account? Sign In'}
-            </button>
-          </div>
+          <button
+            onClick={() => setIsLogin(!isLogin)}
+            className="w-full bg-gray-50 py-3 text-black rounded text-sm hover:bg-gray-100"
+          >
+            {isLogin ? 'Need an account? Create one' : 'Already registered? Sign in'}
+          </button>
         </div>
       </div>
     </div>

@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { api, Exam } from '../lib/api';
-import { GraduationCap, ChevronDown } from 'lucide-react';
+import { ChevronDown } from 'lucide-react';
 
 interface ExamSelectorProps {
   selectedExamId?: string | null;
@@ -37,9 +37,9 @@ export function ExamSelector({ selectedExamId, onSelect, required = false, class
   if (loading) {
     return (
       <div className={`relative ${className}`}>
-        <div className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg bg-gray-50 flex items-center">
-          <div className="w-5 h-5 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
-          <span className="ml-3 text-gray-500">Loading exams...</span>
+        <div className="w-full px-3 py-2 rounded bg-gray-50 flex items-center">
+          <div className="w-4 h-4 border-2 border-gray-300 border-t-black rounded-full animate-spin"></div>
+          <span className="ml-3 text-sm text-gray-600">Loading exams...</span>
         </div>
       </div>
     );
@@ -48,7 +48,7 @@ export function ExamSelector({ selectedExamId, onSelect, required = false, class
   if (error) {
     return (
       <div className={`relative ${className}`}>
-        <div className="w-full pl-10 pr-4 py-3 border border-red-300 rounded-lg bg-red-50 text-red-700 text-sm">
+        <div className="w-full px-3 py-2 rounded bg-red-50 text-red-700 text-sm">
           {error}
         </div>
       </div>
@@ -57,22 +57,19 @@ export function ExamSelector({ selectedExamId, onSelect, required = false, class
 
   return (
     <div className={`relative ${className}`}>
-      <label className="block text-sm font-medium text-gray-700 mb-2">
-        Select Exam {required && <span className="text-red-500">*</span>}
+      <label className="block text-sm text-gray-700 mb-1">
+        Select Exam {required && <span className="text-red-600">*</span>}
       </label>
       <div className="relative">
         <button
           type="button"
           onClick={() => setIsOpen(!isOpen)}
-          className="w-full pl-10 pr-10 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition bg-white text-left flex items-center justify-between"
+          className="w-full px-3 py-2 rounded bg-gray-50 text-left flex items-center justify-between focus:outline-none focus:bg-gray-100"
         >
-          <div className="flex items-center">
-            <GraduationCap className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-            <span className={selectedExam ? 'text-gray-900' : 'text-gray-500'}>
-              {selectedExam ? selectedExam.name : 'Choose an exam...'}
-            </span>
-          </div>
-          <ChevronDown className={`w-5 h-5 text-gray-400 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+          <span className={selectedExam ? 'text-black' : 'text-gray-600'}>
+            {selectedExam ? selectedExam.name : 'Choose an exam...'}
+          </span>
+          <ChevronDown className={`w-4 h-4 text-gray-600 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
         </button>
 
         {isOpen && (
@@ -81,7 +78,7 @@ export function ExamSelector({ selectedExamId, onSelect, required = false, class
               className="fixed inset-0 z-10"
               onClick={() => setIsOpen(false)}
             />
-            <div className="absolute z-20 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-60 overflow-auto">
+            <div className="absolute z-20 w-full mt-1 bg-white rounded max-h-60 overflow-auto shadow-lg">
               {!required && (
                 <button
                   type="button"
@@ -89,7 +86,7 @@ export function ExamSelector({ selectedExamId, onSelect, required = false, class
                     onSelect(null);
                     setIsOpen(false);
                   }}
-                  className="w-full px-4 py-3 text-left hover:bg-gray-50 transition text-gray-700"
+                  className="w-full px-4 py-2 text-left hover:bg-gray-50 text-sm text-black"
                 >
                   None (All exams)
                 </button>
@@ -102,13 +99,13 @@ export function ExamSelector({ selectedExamId, onSelect, required = false, class
                     onSelect(exam.id);
                     setIsOpen(false);
                   }}
-                  className={`w-full px-4 py-3 text-left hover:bg-blue-50 transition ${
-                    selectedExamId === exam.id ? 'bg-blue-50 text-blue-700 font-medium' : 'text-gray-900'
+                  className={`w-full px-4 py-2 text-left hover:bg-gray-50 text-sm ${
+                    selectedExamId === exam.id ? 'bg-gray-100 text-black font-medium' : 'text-black'
                   }`}
                 >
                   <div className="font-medium">{exam.name}</div>
                   {exam.description && (
-                    <div className="text-sm text-gray-500 mt-1">{exam.description}</div>
+                    <div className="text-xs text-gray-600 mt-1">{exam.description}</div>
                   )}
                 </button>
               ))}

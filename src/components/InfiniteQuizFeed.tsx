@@ -1,8 +1,35 @@
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef, type CSSProperties } from 'react';
 import { useSwipeable } from 'react-swipeable';
 import { api, Question, Category } from '../lib/api';
-import { Clock, CheckCircle, XCircle, TrendingUp, Flame, Award, Sparkles, Settings } from 'lucide-react';
+import { Settings } from 'lucide-react';
 import { SettingsScreen } from './SettingsScreen';
+
+function usePrefersReducedMotion() {
+  const [prefersReducedMotion, setPrefersReducedMotion] = useState(false);
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') {
+      return;
+    }
+
+    const mediaQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
+    setPrefersReducedMotion(mediaQuery.matches);
+
+    const handleChange = (event: MediaQueryListEvent | MediaQueryList) => {
+      setPrefersReducedMotion(event.matches);
+    };
+
+    if (typeof mediaQuery.addEventListener === 'function') {
+      mediaQuery.addEventListener('change', handleChange);
+      return () => mediaQuery.removeEventListener('change', handleChange);
+    }
+
+    mediaQuery.addListener(handleChange);
+    return () => mediaQuery.removeListener(handleChange);
+  }, []);
+
+  return prefersReducedMotion;
+}
 
 interface QuizFeedProps {
   userId: string;
@@ -39,6 +66,49 @@ export function InfiniteQuizFeed({ userId, examId }: QuizFeedProps) {
   const categoryContainerRef = useRef<HTMLDivElement>(null);
   const isLoadingRef = useRef(false);
   const isProgrammaticScrollRef = useRef(false);
+  const previousIndexRef = useRef(0);
+  const [transitionDirection, setTransitionDirection] = useState<'up' | 'down'>('down');
+  const prefersReducedMotion = usePrefersReducedMotion();
+  const [isQuestionFadeActive, setIsQuestionFadeActive] = useState(false);
+  const questionFadeTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const isFadeInitializedRef = useRef(false);
+
+  useEffect(() => {
+    const previousIndex = previousIndexRef.current;
+    if (currentIndex > previousIndex) {
+      setTransitionDirection('down');
+    } else if (currentIndex < previousIndex) {
+      setTransitionDirection('up');
+    }
+    previousIndexRef.current = currentIndex;
+    
+    if (prefersReducedMotion) {
+      setIsQuestionFadeActive(false);
+      if (questionFadeTimeoutRef.current) {
+        clearTimeout(questionFadeTimeoutRef.current);
+      }
+      return;
+    }
+
+    if (!isFadeInitializedRef.current) {
+      isFadeInitializedRef.current = true;
+      return;
+    }
+
+    setIsQuestionFadeActive(true);
+    if (questionFadeTimeoutRef.current) {
+      clearTimeout(questionFadeTimeoutRef.current);
+    }
+    questionFadeTimeoutRef.current = setTimeout(() => {
+      setIsQuestionFadeActive(false);
+    }, 320);
+
+    return () => {
+      if (questionFadeTimeoutRef.current) {
+        clearTimeout(questionFadeTimeoutRef.current);
+      }
+    };
+  }, [currentIndex, prefersReducedMotion]);
 
   // Load categories on mount and when examId changes
   useEffect(() => {
@@ -340,6 +410,12 @@ export function InfiniteQuizFeed({ userId, examId }: QuizFeedProps) {
     }
   };
 
+  const canAdvancePastQuestion = (index: number) => {
+    const question = questionStates[index];
+    if (!question) return false;
+    return question.isAnswered || question.timeLeft <= 0;
+  };
+
   const handleTimeout = (index: number) => {
     const currentState = questionStates[index];
 
@@ -350,6 +426,7 @@ export function InfiniteQuizFeed({ userId, examId }: QuizFeedProps) {
         showExplanation: true,
         answeredCorrectly: false,
         isAnswered: true,
+        timeLeft: 0,
       };
       return updated;
     });
@@ -380,6 +457,7 @@ export function InfiniteQuizFeed({ userId, examId }: QuizFeedProps) {
         showExplanation: true,
         answeredCorrectly: isCorrect,
         isAnswered: true,
+        timeLeft: 0,
       };
       return updated;
     });
@@ -396,19 +474,22 @@ export function InfiniteQuizFeed({ userId, examId }: QuizFeedProps) {
 
     setTotalAnswered(prev => prev + 1);
 
-    setTimeout(() => {
-      handleNextQuestion(index);
-    }, 2000);
+    if (isCorrect) {
+      setTimeout(() => {
+        handleNextQuestion(index);
+      }, 2000);
+    }
   };
 
   const handleNextQuestion = (index: number) => {
-    if (index < questionStates.length - 1) {
+    const canProceed = allowScrollWithoutAnswer || canAdvancePastQuestion(index);
+    if (index < questionStates.length - 1 && canProceed) {
       isProgrammaticScrollRef.current = true;
       setCurrentIndex(index + 1);
       if (containerRef.current) {
         containerRef.current.scrollTo({
           top: (index + 1) * window.innerHeight,
-          behavior: 'smooth',
+          behavior: 'auto',
         });
         // Reset flag after scroll animation completes
         setTimeout(() => {
@@ -440,6 +521,20 @@ export function InfiniteQuizFeed({ userId, examId }: QuizFeedProps) {
     
     const scrollTop = containerRef.current.scrollTop;
     const newIndex = Math.round(scrollTop / window.innerHeight);
+    if (newIndex > currentIndex && !allowScrollWithoutAnswer) {
+      const currentQuestion = questionStates[currentIndex];
+      if (currentQuestion && !canAdvancePastQuestion(currentIndex)) {
+        isProgrammaticScrollRef.current = true;
+        containerRef.current.scrollTo({
+          top: currentIndex * window.innerHeight,
+          behavior: 'smooth',
+        });
+        setTimeout(() => {
+          isProgrammaticScrollRef.current = false;
+        }, 500);
+        return;
+      }
+    }
     if (newIndex !== currentIndex && newIndex < questionStates.length) {
       setCurrentIndex(newIndex);
     }
@@ -448,7 +543,7 @@ export function InfiniteQuizFeed({ userId, examId }: QuizFeedProps) {
   // Task 4: Category navigation swipe handlers
   // Apply to the entire header area for better swipe detection
   const categoryHandlers = useSwipeable({
-    onSwipedLeft: (eventData) => {
+    onSwipedLeft: () => {
       // Swipe left = next category
       const currentIdx = categories.findIndex(c => c.name === selectedCategory);
       if (currentIdx < categories.length - 1) {
@@ -456,7 +551,7 @@ export function InfiniteQuizFeed({ userId, examId }: QuizFeedProps) {
         setSelectedCategory(nextCategory.name);
       }
     },
-    onSwipedRight: (eventData) => {
+    onSwipedRight: () => {
       // Swipe right = previous category
       const currentIdx = categories.findIndex(c => c.name === selectedCategory);
       if (currentIdx > 0) {
@@ -476,9 +571,8 @@ export function InfiniteQuizFeed({ userId, examId }: QuizFeedProps) {
   const questionHandlers = useSwipeable({
     onSwipedUp: () => {
       if (currentIndex < questionStates.length - 1) {
-        const currentQuestion = questionStates[currentIndex];
-        // Respect "Allow Scroll Without Answer" setting
-        if (!allowScrollWithoutAnswer && currentQuestion && !currentQuestion.isAnswered) {
+        const canProceed = allowScrollWithoutAnswer || canAdvancePastQuestion(currentIndex);
+        if (!canProceed) {
           return; // Don't allow swipe if answer required
         }
         handleNextQuestion(currentIndex);
@@ -489,10 +583,10 @@ export function InfiniteQuizFeed({ userId, examId }: QuizFeedProps) {
         isProgrammaticScrollRef.current = true;
         setCurrentIndex(currentIndex - 1);
         if (containerRef.current) {
-          containerRef.current.scrollTo({
-            top: (currentIndex - 1) * window.innerHeight,
-            behavior: 'smooth',
-          });
+        containerRef.current.scrollTo({
+          top: (currentIndex - 1) * window.innerHeight,
+          behavior: 'auto',
+        });
           setTimeout(() => {
             isProgrammaticScrollRef.current = false;
           }, 1000);
@@ -521,48 +615,46 @@ export function InfiniteQuizFeed({ userId, examId }: QuizFeedProps) {
     delta: 80, // Minimum distance for swipe
   });
 
+  const shouldShowQuestionFade = isQuestionFadeActive && !prefersReducedMotion;
+
   if (loading) {
     return (
-      <div className="min-h-screen bg-black flex items-center justify-center">
+      <div className="min-h-screen bg-white flex items-center justify-center">
         <div className="text-center">
-          <Sparkles className="w-16 h-16 text-purple-500 animate-pulse mx-auto mb-4" />
-          <p className="text-gray-400 text-lg">Generating fresh questions...</p>
-          <p className="text-gray-600 text-sm mt-2">Powered by AI</p>
+          <div className="w-12 h-12 border-2 border-gray-300 border-t-black rounded-full animate-spin mx-auto mb-4"></div>
+          <p className="text-gray-600 text-sm">Loading questions</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-black">
+    <div className="min-h-screen bg-white text-black">
       <div 
         {...categoryHandlers}
-        className="fixed top-0 left-0 right-0 z-50 bg-gradient-to-b from-black via-black/95 to-transparent pointer-events-auto"
+        className="fixed top-0 left-0 right-0 z-50 bg-white"
       >
         <div className="px-4 py-3">
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-4">
-              <div className="flex items-center gap-2">
-                <Award className="w-5 h-5 text-yellow-500" />
-                <span className="text-white font-bold text-lg">{score}</span>
+              <div className="flex items-center gap-2 rounded px-3 py-1 bg-gray-50">
+                <span className="text-base font-medium text-black">Score: {score}</span>
               </div>
               {streak > 1 && (
-                <div className="flex items-center gap-2 bg-orange-600 px-3 py-1 rounded-full animate-pulse">
-                  <Flame className="w-4 h-4 text-white" />
-                  <span className="text-white font-bold text-sm">{streak}x</span>
+                <div className="flex items-center gap-2 bg-black text-white px-3 py-1 rounded">
+                  <span className="text-sm font-medium">{streak}x</span>
                 </div>
               )}
             </div>
             <div className="flex items-center gap-3">
-              <div className="flex items-center gap-2">
-                <TrendingUp className="w-5 h-5 text-green-500" />
-                <span className="text-white font-bold text-sm">{totalAnswered}</span>
+              <div className="text-sm text-gray-600">
+                Answered: {totalAnswered}
               </div>
               <button
                 onClick={() => setShowSettings(true)}
-                className="p-2 rounded-full bg-gray-800 hover:bg-gray-700 transition-colors"
+                className="p-2 rounded hover:bg-gray-50"
               >
-                <Settings className="w-5 h-5 text-gray-400" />
+                <Settings className="w-5 h-5 text-black" />
               </button>
             </div>
           </div>
@@ -579,13 +671,12 @@ export function InfiniteQuizFeed({ userId, examId }: QuizFeedProps) {
               <button
                 key={cat.id}
                 onClick={() => setSelectedCategory(cat.name)}
-                className={`px-4 py-2 rounded-full font-medium text-sm whitespace-nowrap transition-all duration-300 ease-in-out flex-shrink-0 ${
+                className={`px-4 py-2 rounded text-sm whitespace-nowrap flex-shrink-0 ${
                   selectedCategory === cat.name
-                    ? 'bg-gradient-to-r from-purple-500 to-pink-500 text-white scale-105'
-                    : 'bg-gray-800 text-gray-400 hover:bg-gray-700 active:bg-gray-700'
+                    ? 'bg-black text-white'
+                    : 'text-black hover:bg-gray-50 bg-white'
                 }`}
               >
-                {cat.name === 'News This Month' && <Sparkles className="w-3 h-3 inline mr-1" />}
                 {cat.name === 'all' ? 'All' : cat.name}
               </button>
             ))}
@@ -593,49 +684,62 @@ export function InfiniteQuizFeed({ userId, examId }: QuizFeedProps) {
         </div>
       </div>
 
-      <div
-        ref={containerRef}
-        {...questionHandlers}
-        onScroll={handleScroll}
-        className={`h-screen overflow-y-scroll snap-y snap-mandatory scrollbar-hide transition-opacity duration-300 ${
-          isCategoryTransitioning ? 'opacity-70' : 'opacity-100'
-        }`}
-        style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
-      >
-        {!loading && questionStates.length === 0 && (
-          <div className="h-screen snap-start flex items-center justify-center bg-black">
-            <div className="text-center px-6">
-              <Sparkles className="w-16 h-16 text-gray-600 mx-auto mb-4" />
-              <h2 className="text-2xl font-bold text-white mb-2">No Questions Available</h2>
-              <p className="text-gray-400 mb-4">
-                {selectedCategory === 'all' 
-                  ? "All questions have been answered or filtered out."
-                  : `No questions available in "${selectedCategory === 'all' ? 'All' : selectedCategory}" category.`}
-              </p>
-              <p className="text-gray-500 text-sm">
-                Try selecting a different category or adjusting your filters in settings.
-              </p>
+      <div className="relative h-screen">
+        <div
+          ref={containerRef}
+          {...(() => {
+            const { ref, ...handlers } = questionHandlers;
+            return handlers;
+          })()}
+          onScroll={handleScroll}
+          className={`h-screen overflow-y-scroll snap-y snap-mandatory scrollbar-hide transition-opacity duration-300 ${
+            isCategoryTransitioning ? 'opacity-70' : 'opacity-100'
+          }`}
+          style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
+        >
+          {!loading && questionStates.length === 0 && (
+            <div className="h-screen snap-start flex items-center justify-center bg-white">
+              <div className="text-center px-6">
+                <h2 className="text-xl font-medium text-black mb-2">No questions available</h2>
+                <p className="text-gray-600 text-sm">
+                  {selectedCategory === 'all' 
+                    ? "All questions have been answered or filtered out."
+                    : `No questions available in "${selectedCategory === 'all' ? 'All' : selectedCategory}" category.`}
+                </p>
+              </div>
             </div>
-          </div>
-        )}
+          )}
 
-        {questionStates.map((state, index) => (
-          <QuestionCard
-            key={`${selectedCategory}-${state.question.id}-${index}`}
-            state={state}
-            index={index}
-            isActive={index === currentIndex}
-            onAnswerSelect={handleAnswerSelect}
-          />
-        ))}
+          {questionStates.map((state, index) => (
+            <QuestionCard
+              key={`${selectedCategory}-${state.question.id}-${index}`}
+              state={state}
+              index={index}
+              isActive={index === currentIndex}
+              onAnswerSelect={handleAnswerSelect}
+              transitionDirection={transitionDirection}
+              prefersReducedMotion={prefersReducedMotion}
+              onNextQuestion={() => handleNextQuestion(index)}
+              hasNextQuestion={index < questionStates.length - 1}
+            />
+          ))}
 
-        {loadingMore && (
-          <div className="h-screen snap-start flex items-center justify-center bg-black">
-            <div className="text-center">
-              <Sparkles className="w-12 h-12 text-purple-500 animate-pulse mx-auto mb-3" />
-              <p className="text-gray-400">Loading more questions...</p>
+          {loadingMore && (
+            <div className="h-screen snap-start flex items-center justify-center bg-white">
+              <div className="text-center">
+                <div className="w-12 h-12 border-2 border-gray-300 border-t-black rounded-full animate-spin mx-auto mb-4"></div>
+                <p className="text-gray-600 text-sm">Loading more</p>
+              </div>
             </div>
-          </div>
+          )}
+        </div>
+
+        {!prefersReducedMotion && (
+          <div
+            className={`pointer-events-none absolute inset-0 z-40 bg-white/70 backdrop-blur-sm transition-opacity duration-500 ${
+              shouldShowQuestionFade ? 'opacity-100' : 'opacity-0'
+            }`}
+          ></div>
         )}
       </div>
 
@@ -660,108 +764,239 @@ interface QuestionCardProps {
   index: number;
   isActive: boolean;
   onAnswerSelect: (index: number, answer: string | null) => void;
+  transitionDirection: 'up' | 'down';
+  prefersReducedMotion: boolean;
+  onNextQuestion: () => void;
+  hasNextQuestion: boolean;
 }
 
-function QuestionCard({ state, index, isActive, onAnswerSelect }: QuestionCardProps) {
-  const isStatementQuestion = state.question.question_format === 'statement';
-
+function QuestionCard({
+  state,
+  index,
+  isActive,
+  onAnswerSelect,
+  transitionDirection,
+  prefersReducedMotion,
+  onNextQuestion,
+  hasNextQuestion,
+}: QuestionCardProps) {
+  const [showLongOptionsPanel, setShowLongOptionsPanel] = useState(false);
+  const [panelFocusKey, setPanelFocusKey] = useState<string | null>(null);
   const options = [
     { key: 'a', text: state.question.option_a || '' },
     { key: 'b', text: state.question.option_b || '' },
     { key: 'c', text: state.question.option_c || '' },
     { key: 'd', text: state.question.option_d || '' },
   ];
+  const correctAnswerKey = (state.question.correct_answer || '').toLowerCase();
+  const selectedAnswerKey = (state.selectedAnswer || '').toLowerCase();
+  const OPTION_LENGTH_THRESHOLD = 220;
+  const longOptions = options.filter(option => option.text.trim().length > OPTION_LENGTH_THRESHOLD);
+  const displayOptions = !state.isAnswered
+    ? options
+    : state.answeredCorrectly
+    ? []
+    : options.filter(option => {
+        if (!selectedAnswerKey) return option.key === correctAnswerKey;
+        return option.key === correctAnswerKey || option.key === selectedAnswerKey;
+      });
 
-  const questionWordCount = state.question.question_text.split(' ').length;
-  const totalOptionWords = options.reduce((sum, opt) => sum + opt.text.split(' ').length, 0);
-  const totalWords = questionWordCount + totalOptionWords;
-  const explanationWordCount = state.question.explanation.split(' ').length;
+  const motionBase = prefersReducedMotion
+    ? 'opacity-100 scale-100 translate-y-0'
+    : 'transition-[transform,opacity,filter] duration-[850ms] ease-[cubic-bezier(0.22,1,0.36,1)] will-change-transform opacity-100 translate-y-0';
+  const inactiveOffset = prefersReducedMotion
+    ? ''
+    : transitionDirection === 'down'
+    ? 'translate-y-16 rotate-[-1.25deg]'
+    : '-translate-y-16 rotate-[1.25deg]';
+  const cardMotionClasses = isActive
+    ? `${motionBase} scale-100 blur-0 pointer-events-auto`
+    : prefersReducedMotion
+    ? 'opacity-80'
+    : `opacity-0 scale-[0.95] ${inactiveOffset} blur-[2px] pointer-events-none`;
 
-  const getQuestionFontSize = () => {
-    if (isStatementQuestion) return 'text-xl md:text-2xl';
-    if (questionWordCount > 40) return 'text-md md:text-lg';
-    if (questionWordCount > 25) return 'text-lg md:text-xl';
-    return 'text-md md:text-xl';
-  };
-
-  const getOptionFontSize = () => {
-    if (totalWords > 100) return 'text-sm';
-    if (totalWords > 70) return 'text-sm';
-    return 'text-sm';
-  };
-
-  const getExplanationFontSize = () => {
-    if (explanationWordCount > 80) return 'text-sm';
-    if (explanationWordCount > 50) return 'text-sm';
-    return 'text-sm';
-  };
+  const questionContentMotion = prefersReducedMotion
+    ? 'opacity-100 translate-y-0'
+    : isActive
+    ? 'opacity-100 translate-y-0'
+    : `opacity-0 ${transitionDirection === 'down' ? 'translate-y-8' : '-translate-y-8'}`;
 
   return (
-    <div className="h-screen snap-start flex flex-col relative overflow-hidden transition-opacity duration-300 ease-in-out">
-      <div className={`flex items-center justify-center px-4 pt-32 bg-gradient-to-b from-gray-900 via-gray-800 to-gray-900 ${
-        state.isAnswered ? 'pb-4' : 'pb-8'
-      }`}>
-        <div className="w-full max-w-2xl">
-          {/* <div className="mb-6 flex items-center justify-center gap-2">
-            <div className="w-2 h-2 rounded-full bg-blue-500 animate-pulse"></div>
-            <div className="w-2 h-2 rounded-full bg-purple-500 animate-pulse" style={{ animationDelay: '0.2s' }}></div>
-            <div className="w-2 h-2 rounded-full bg-pink-500 animate-pulse" style={{ animationDelay: '0.4s' }}></div>
-          </div> */}
-          <h2 className={`text-white font-medium ${getQuestionFontSize()} leading-tight text-left mb-0`}>
-            {state.question.question_text}
-          </h2>
-
-          
+    <div
+      className={`h-screen snap-start flex flex-col relative overflow-hidden bg-white ${cardMotionClasses}`}
+    >
+      <div className={`px-4 pt-28 pb-4 sm:pt-24 sm:pb-3`}>
+        <div className="w-full max-w-2xl mx-auto relative">
+          <div
+            className={`flex flex-col gap-3 transition-all duration-700 ${questionContentMotion}`}
+          >
+            <div className="space-y-2 flex-1 min-w-0 sm:pr-32">
+              <div className="text-sm text-gray-600">
+                Question {index + 1}
+              </div>
+              <h2 className="text-[14px] font-medium text-black leading-tight break-words">
+                {state.question.question_text}
+              </h2>
+            </div>
+            {isActive && !state.isAnswered && (
+              <div className="flex items-center gap-2 flex-shrink-0 w-full sm:w-auto sm:absolute sm:top-0 sm:right-0 sm:flex-col sm:items-end sm:gap-1">
+                <div className="text-xs uppercase tracking-wide text-gray-500 hidden sm:block">Time left</div>
+                <span
+                  className={`text-sm sm:text-base font-medium px-3 py-1 rounded text-center min-w-[72px] sm:min-w-[68px] ${
+                    state.timeLeft <= 5
+                      ? 'text-red-600 bg-red-50'
+                      : state.timeLeft <= 10
+                      ? 'text-orange-600 bg-orange-50'
+                      : 'text-black bg-gray-50'
+                  }`}
+                >
+                  {state.timeLeft}s
+                </span>
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
-      <div className={`bg-black px-3 pt-4 ${state.isAnswered ? 'pb-8 flex-1 overflow-y-auto' : 'pb-8'}`}>
-        {!state.isAnswered ? (
-          <div className="space-y-3 max-w-2xl mx-auto">
-            {options.map((option) => {
-              return (
-                <button
-                  key={option.key}
-                  onClick={() => onAnswerSelect(index, option.key)}
-                  className="w-full text-left p-2 rounded-2xl transition-all duration-300 transform active:scale-95 bg-gray-900 border-2 border-gray-800 hover:border-blue-500 active:bg-gray-800"
-                >
-                  <div className="flex items-center gap-4">
-                    {/* <span className="flex-shrink-0 w-12 h-12 rounded-xl bg-gradient-to-br from-blue-500 to-purple-500 text-white flex items-center justify-center font-bold text-lg shadow-lg">
-                      {option.key.toUpperCase()}
-                    </span> */}
-                    <span className={`flex-1 text-white ${getOptionFontSize()}`}>{option.text}</span>
-                  </div>
-                </button>
-              );
-            })}
-          </div>
-        ) : (
-          <div className="max-w-2xl mx-auto bg-gradient-to-br from-blue-900/30 to-purple-900/30 border-l-4 border-blue-500 p-6 rounded-xl backdrop-blur-sm mb-4">
-            <p className="text-blue-300 text-sm font-bold mb-4">
-              {state.answeredCorrectly ? '✓ Correct! Keep going!' : '✗ Incorrect - Review and learn'}
-            </p>
-            <p className={`text-gray-200 ${getExplanationFontSize()} leading-relaxed`}>
-              {state.question.explanation}
-            </p>
-          </div>
-        )}
-      </div>
-{isActive && !state.isAnswered && (
-            <div className="flex items-center justify-center gap-3 text-white">
-              <Clock className="w-5 h-5" />
-              <span className={`text-2xl font-bold ${
-                state.timeLeft <= 10 ? 'text-red-500 animate-pulse' : ''
-              }`}>
-                {state.timeLeft}s
-              </span>
+      <div className={`flex-1 bg-white px-4 pt-4 sm:pt-3 ${state.isAnswered ? 'pb-16 overflow-y-auto' : 'pb-16'}`}>
+        <div className="space-y-3 max-w-2xl mx-auto">
+          {displayOptions.length > 0 && (
+            <div className="space-y-2 pb-6">
+              {displayOptions.map((option, optionIndex) => {
+                const isCorrectOption = option.key === correctAnswerKey;
+                const isUserSelection = option.key === selectedAnswerKey;
+                const showAnswerStyles = state.isAnswered;
+
+                let baseClasses =
+                  'w-full text-left px-3 py-2 rounded bg-gray-50 hover:bg-gray-100 text-[11px] transition-all duration-500 transform hover:-translate-y-1 hover:shadow-lg';
+                let dynamicClasses = '';
+                let transformStyle: CSSProperties = {};
+
+                if (showAnswerStyles) {
+                  if (isCorrectOption) {
+                    dynamicClasses =
+                      'bg-green-100 text-green-900 shadow-[0_20px_45px_rgba(34,197,94,0.25)] hover:shadow-[0_25px_55px_rgba(34,197,94,0.35)]';
+                    transformStyle = { transform: 'perspective(800px) translateZ(25px) rotateX(1deg)' };
+                  } else if (isUserSelection && !isCorrectOption) {
+                    dynamicClasses =
+                      'bg-red-100 text-red-900 shadow-[0_20px_45px_rgba(239,68,68,0.25)] hover:shadow-[0_25px_55px_rgba(239,68,68,0.35)]';
+                    transformStyle = { transform: 'perspective(800px) translateZ(15px) rotateX(-1.5deg)' };
+                  } else {
+                    dynamicClasses = 'bg-gray-100 text-gray-700 opacity-70';
+                    transformStyle = { transform: 'perspective(800px) translateZ(5px)' };
+                  }
+                }
+
+                const needsShowMore = option.text.trim().length > OPTION_LENGTH_THRESHOLD;
+                const staggerStyle: CSSProperties = {
+                  ...transformStyle,
+                  transitionDelay: prefersReducedMotion ? undefined : `${optionIndex * 70}ms`,
+                };
+
+                return (
+                  <button
+                    key={option.key}
+                    onClick={() => onAnswerSelect(index, option.key)}
+                    disabled={state.isAnswered}
+                    className={`${baseClasses} ${dynamicClasses}`}
+                    style={staggerStyle}
+                  >
+                    <div className="flex items-center">
+                      <span className="flex-1">{option.text}</span>
+                      {needsShowMore && (
+                        <span
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            event.preventDefault();
+                            setPanelFocusKey(option.key);
+                            setShowLongOptionsPanel(true);
+                          }}
+                          className="text-xs font-semibold text-blue-600 underline cursor-pointer"
+                        >
+                          Show more
+                        </span>
+                      )}
+                    </div>
+                  </button>
+                );
+              })}
             </div>
           )}
+
+          {state.isAnswered && (
+            <div
+              className={`rounded p-5 mt-6 transition-all duration-500 transform ${
+                state.answeredCorrectly
+                  ? 'bg-green-50 text-green-900 shadow-[0_20px_45px_rgba(34,197,94,0.25)]'
+                  : 'bg-red-50 text-red-900 shadow-[0_20px_45px_rgba(239,68,68,0.25)]'
+              }`}
+              style={{
+                transform: 'perspective(900px) translateZ(30px) rotateX(1deg)',
+              }}
+            >
+              <p className="text-base font-semibold mb-3">
+                {state.answeredCorrectly ? 'Perfect choice!' : 'Let’s adjust that instinct.'}
+              </p>
+              <p className="text-[11px] leading-relaxed">{state.question.explanation}</p>
+              {hasNextQuestion && (
+                <div className="mt-6 flex justify-end">
+                  <button
+                    onClick={onNextQuestion}
+                    className="inline-flex items-center gap-2 rounded-full bg-black text-white text-sm font-semibold px-5 py-2 transition-colors hover:bg-gray-900"
+                  >
+                    Next question
+                    <span aria-hidden="true">→</span>
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+
       {!state.isAnswered && (
-        <div className="absolute bottom-0 left-0 right-0 h-2 bg-gray-900">
+        <div className="absolute bottom-0 left-0 right-0 h-1 bg-gray-200">
           <div
-            className="h-full bg-gradient-to-r from-blue-500 via-purple-500 to-pink-500 transition-all duration-1000 ease-linear"
+            className={`h-full transition-all duration-1000 ease-linear ${
+              state.timeLeft <= 5 
+                ? 'bg-red-500' 
+                : state.timeLeft <= 10 
+                ? 'bg-orange-500' 
+                : 'bg-gray-400'
+            }`}
             style={{ width: `${(state.timeLeft / 30) * 100}%` }}
           ></div>
+        </div>
+      )}
+
+      {showLongOptionsPanel && longOptions.length > 0 && (
+        <div className="px-4 pb-6">
+          <div className="max-w-2xl mx-auto rounded-2xl bg-white shadow-[0_25px_60px_rgba(15,23,42,0.15)] border border-gray-100">
+            <div className="flex items-center justify-between p-4 border-b border-gray-100">
+              <h3 className="text-base font-semibold text-black">Full answer text</h3>
+              <button
+                onClick={() => setShowLongOptionsPanel(false)}
+                className="text-sm text-gray-500 hover:text-black font-medium"
+              >
+                Close
+              </button>
+            </div>
+            <div className="p-4 space-y-4 max-h-[40vh] overflow-y-auto">
+              {longOptions.map((option) => (
+                <div
+                  key={option.key}
+                  className={`rounded-xl bg-gray-50 p-4 ${
+                    panelFocusKey === option.key ? 'ring-1 ring-black shadow-lg' : ''
+                  }`}
+                >
+                  <p className="text-sm font-semibold text-gray-900 mb-2">
+                    Option {option.key.toUpperCase()}
+                  </p>
+                  <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-line">{option.text}</p>
+                </div>
+              ))}
+            </div>
+          </div>
         </div>
       )}
     </div>

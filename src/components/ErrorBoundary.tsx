@@ -66,31 +66,31 @@ export class ErrorBoundary extends Component<Props, State> {
       }
 
       return (
-        <div className="min-h-screen bg-black flex items-center justify-center px-4">
-          <div className="max-w-md w-full bg-gray-900 rounded-2xl p-8 border border-gray-800">
+        <div className="min-h-screen layered-gradient flex items-center justify-center px-4">
+          <div className="max-w-md w-full glass rounded-[32px] p-8 border border-gray-300 shadow-lg">
             <div className="flex items-center justify-center mb-6">
-              <div className="w-16 h-16 bg-red-900/20 rounded-full flex items-center justify-center">
-                <AlertCircle className="w-8 h-8 text-red-500" />
+              <div className="w-16 h-16 rounded-full border border-gray-300 flex items-center justify-center bg-gray-100">
+                <AlertCircle className="w-8 h-8 text-gray-600" />
               </div>
             </div>
 
-            <h1 className="text-2xl font-bold text-white text-center mb-4">
-              Something went wrong
+            <h1 className="text-2xl font-semibold text-gray-900 text-center mb-4">
+              Something went off-track
             </h1>
 
-            <p className="text-gray-400 text-center mb-6">
-              We encountered an unexpected error. Don't worry, your data is safe.
+            <p className="text-gray-600 text-center mb-6">
+              An unexpected error surfaced. Your progress remains intact.
             </p>
 
             {import.meta.env.DEV && this.state.error && (
-              <div className="mb-6 p-4 bg-gray-800 rounded-lg">
-                <p className="text-red-400 text-sm font-mono mb-2">
+              <div className="mb-6 p-4 border border-gray-300 rounded-2xl bg-gray-50">
+                <p className="text-gray-700 text-sm font-mono mb-2">
                   {this.state.error.toString()}
                 </p>
                 {this.state.errorInfo && (
                   <details className="text-xs text-gray-500">
                     <summary className="cursor-pointer mb-2">Stack trace</summary>
-                    <pre className="overflow-auto max-h-40">
+                    <pre className="overflow-auto max-h-40 text-gray-600">
                       {this.state.errorInfo.componentStack}
                     </pre>
                   </details>
@@ -101,23 +101,23 @@ export class ErrorBoundary extends Component<Props, State> {
             <div className="flex flex-col gap-3">
               <button
                 onClick={this.handleReset}
-                className="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-3 px-4 rounded-lg transition-colors flex items-center justify-center gap-2"
+                className="w-full bg-gray-900 text-white font-semibold py-3 px-4 rounded-2xl uppercase tracking-[0.3em] flex items-center justify-center gap-2 hover:bg-gray-800 transition-colors"
               >
                 <RefreshCw className="w-5 h-5" />
-                Try Again
+                Retry
               </button>
 
               <button
                 onClick={this.handleGoHome}
-                className="w-full bg-gray-800 hover:bg-gray-700 text-white font-medium py-3 px-4 rounded-lg transition-colors flex items-center justify-center gap-2"
+                className="w-full border border-gray-300 text-gray-700 font-semibold py-3 px-4 rounded-2xl uppercase tracking-[0.3em] hover:bg-gray-100 flex items-center justify-center gap-2 transition-colors"
               >
                 <Home className="w-5 h-5" />
-                Go Home
+                Home
               </button>
             </div>
 
             <p className="text-gray-500 text-xs text-center mt-6">
-              If this problem persists, please contact support.
+              If this continues, reach out to support.
             </p>
           </div>
         </div>

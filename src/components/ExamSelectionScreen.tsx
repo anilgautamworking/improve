@@ -38,10 +38,10 @@ export function ExamSelectionScreen({ onSelect, onSkip }: ExamSelectionScreenPro
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-orange-50 flex items-center justify-center p-4">
+      <div className="min-h-screen bg-white flex items-center justify-center p-6">
         <div className="text-center">
-          <div className="w-16 h-16 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-          <p className="text-gray-600">Loading exams...</p>
+          <div className="w-12 h-12 border-2 border-gray-300 border-t-black rounded-full animate-spin mx-auto mb-4"></div>
+          <p className="text-gray-600 text-sm">Loading exams</p>
         </div>
       </div>
     );
@@ -49,16 +49,18 @@ export function ExamSelectionScreen({ onSelect, onSkip }: ExamSelectionScreenPro
 
   if (error) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-orange-50 flex items-center justify-center p-4">
-        <div className="bg-white rounded-2xl shadow-xl p-8 max-w-md w-full text-center">
-          <div className="text-red-500 mb-4">
-            <GraduationCap className="w-16 h-16 mx-auto" />
+      <div className="min-h-screen bg-white flex items-center justify-center p-6">
+        <div className="max-w-md w-full text-center space-y-4">
+          <div className="text-red-600 mb-2">
+            <GraduationCap className="w-12 h-12 mx-auto" />
           </div>
-          <h2 className="text-2xl font-bold text-gray-900 mb-4">Error Loading Exams</h2>
-          <p className="text-gray-600 mb-6">{error}</p>
+          <div>
+            <h2 className="text-xl font-medium text-black mb-2">Unable to load exams</h2>
+            <p className="text-gray-600 text-sm">{error}</p>
+          </div>
           <button
             onClick={loadExams}
-            className="px-6 py-3 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition"
+            className="w-full py-3 bg-black text-white rounded text-base hover:bg-gray-800"
           >
             Retry
           </button>
@@ -68,51 +70,61 @@ export function ExamSelectionScreen({ onSelect, onSkip }: ExamSelectionScreenPro
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-orange-50 flex items-center justify-center p-4">
-      <div className="w-full max-w-2xl">
-        <div className="bg-white rounded-2xl shadow-xl p-8">
-          <div className="text-center mb-8">
-            <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-br from-blue-500 to-orange-500 rounded-full mb-4">
-              <GraduationCap className="w-8 h-8 text-white" />
-            </div>
-            <h1 className="text-3xl font-bold text-gray-900 mb-2">Select Your Exam</h1>
-            <p className="text-gray-600">Choose the exam you're preparing for to get personalized questions</p>
-          </div>
+    <div className="min-h-screen bg-white flex items-center justify-center px-6 py-12">
+      <div className="w-full max-w-3xl space-y-8">
+        <div className="text-center">
+          <h1 className="text-2xl font-medium text-black mb-2">Select your exam</h1>
+          <p className="text-gray-600 text-sm">
+            Choose the focus area you are preparing for
+          </p>
+        </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
-            {exams.map((exam) => (
-              <button
-                key={exam.id}
-                onClick={() => setSelectedExamId(exam.id)}
-                className={`p-6 rounded-xl border-2 transition-all text-left ${
-                  selectedExamId === exam.id
-                    ? 'border-blue-500 bg-blue-50 shadow-md'
-                    : 'border-gray-200 hover:border-gray-300 hover:shadow-sm'
-                }`}
-              >
-                <div className="flex items-start justify-between mb-2">
-                  <h3 className="text-xl font-semibold text-gray-900">{exam.name}</h3>
-                  {selectedExamId === exam.id && (
-                    <div className="w-6 h-6 bg-blue-500 rounded-full flex items-center justify-center">
-                      <div className="w-2 h-2 bg-white rounded-full"></div>
+        <div className="bg-white rounded-lg p-6 space-y-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {exams.map((exam) => {
+              const isSelected = selectedExamId === exam.id;
+              return (
+                <button
+                  key={exam.id}
+                  onClick={() => setSelectedExamId(exam.id)}
+                  className={`rounded-lg px-4 py-4 text-left ${
+                    isSelected
+                      ? 'bg-black text-white'
+                      : 'bg-gray-50 text-black hover:bg-gray-100'
+                  }`}
+                >
+                  <div className="flex items-start justify-between">
+                    <div>
+                      <p className={`text-xs ${isSelected ? 'text-white/80' : 'text-gray-600'}`}>
+                        {exam.category || 'Primary'}
+                      </p>
+                      <h3 className={`text-lg font-medium mt-1 ${isSelected ? 'text-white' : 'text-black'}`}>
+                        {exam.name}
+                      </h3>
                     </div>
+                    <div
+                      className={`w-5 h-5 rounded-full flex items-center justify-center ${
+                        isSelected ? 'bg-white/20' : 'bg-gray-200'
+                      }`}
+                    >
+                      {isSelected && <div className="w-2 h-2 rounded-full bg-white" />}
+                    </div>
+                  </div>
+                  {exam.description && (
+                    <p className={`mt-2 text-sm ${isSelected ? 'text-white/80' : 'text-gray-600'}`}>
+                      {exam.description}
+                    </p>
                   )}
-                </div>
-                {exam.category && (
-                  <p className="text-sm text-gray-500 mb-2">{exam.category}</p>
-                )}
-                {exam.description && (
-                  <p className="text-sm text-gray-600">{exam.description}</p>
-                )}
-              </button>
-            ))}
+                </button>
+              );
+            })}
           </div>
 
           {onSkip && (
-            <div className="text-center mb-6">
+            <div className="text-center">
               <button
                 onClick={onSkip}
-                className="text-gray-500 hover:text-gray-700 text-sm transition"
+                className="text-gray-600 hover:text-black text-sm"
               >
                 Skip for now
               </button>
@@ -122,10 +134,10 @@ export function ExamSelectionScreen({ onSelect, onSkip }: ExamSelectionScreenPro
           <button
             onClick={handleContinue}
             disabled={!selectedExamId}
-            className="w-full py-3 bg-gradient-to-r from-blue-500 to-orange-500 text-white font-semibold rounded-lg hover:from-blue-600 hover:to-orange-600 transition disabled:opacity-50 disabled:cursor-not-allowed shadow-lg flex items-center justify-center gap-2"
+            className="w-full py-3 bg-black text-white rounded text-base hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
           >
             Continue
-            <ArrowRight className="w-5 h-5" />
+            <ArrowRight className="w-4 h-4" />
           </button>
         </div>
       </div>
